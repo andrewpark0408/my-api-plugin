@@ -1,4 +1,8 @@
-import { saveTokens } from "@/utils/quickbooks";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 export async function GET(req: Request) {
   try {
@@ -7,43 +11,35 @@ export async function GET(req: Request) {
     const realmId = url.searchParams.get("realmId");
 
     if (!code || !realmId) {
-      throw new Error("Missing code or realmId from QuickBooks callback.");
+      return new Response(JSON.stringify({ error: "Missing code or realmId" }), { status: 400 });
     }
 
-    // Exchange the authorization code for tokens
-    const response = await fetch("https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${Buffer.from(
-          `${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`
-        ).toString("base64")}`,
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: process.env.QUICKBOOKS_REDIRECT_URI || "",
-      }),
+    console.log("📥 Received QuickBooks OAuth Code:", code);
+    console.log("📥 Received Realm ID:", realmId);
+
+    // Retrieve the authenticated session
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
+    }
+
+    console.log("✅ Authenticated user:", session.user.email);
+
+    // Store realmId in session
+    session.user.realmId = realmId;
+    console.log("✅ Stored realmId in session:", session.user.realmId);
+
+    // Save realmId to the database for the user
+    await prisma.user.update({
+      where: { email: session.user.email },
+      data: { realmId }
     });
 
-    if (!response.ok) {
-      throw new Error("Failed to exchange QuickBooks authorization code for tokens.");
-    }
+    console.log("✅ Saved realmId to the database for", session.user.email);
 
-    const { access_token, refresh_token } = await response.json();
-
-    console.log("Received tokens:", { realmId, access_token, refresh_token });
-
-    // Save the tokens in the database
-    await saveTokens(realmId, access_token, refresh_token);
-
-    // Redirect back with a "connected" query parameter
-    return Response.redirect("http://localhost:3000/invoices", 302); // Replace with your invoices page route
+    return new Response(JSON.stringify({ message: "QuickBooks connected successfully" }), { status: 200 });
   } catch (error) {
-    console.error("Error exchanging tokens with QuickBooks:", error);
-    return new Response(
-      JSON.stringify({ message: "Error exchanging tokens", error: error.message }),
-      { status: 500 }
-    );
+    console.error("❌ Error in QuickBooks callback:", error);
+    return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
   }
 }

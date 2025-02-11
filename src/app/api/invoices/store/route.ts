@@ -15,7 +15,7 @@ export async function POST(req: Request) {
 
     for (const invoice of invoices) {
       await prisma.invoice.upsert({
-        where: { invoiceId: invoice.Id }, // Prevents duplicates
+        where: { invoiceId: invoice.Id },
         update: {
           customerId: invoice.CustomerRef.value,
           totalAmount: invoice.TotalAmt,

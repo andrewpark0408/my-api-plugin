@@ -1,28 +1,35 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 const prisma = new PrismaClient();
 
-// GET method
-export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-
-  if (!session) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
+/**
+ * GET: Fetch all invoices from the database.
+ */
+export async function GET() {
   try {
+    console.log("🔍 Fetching invoices from database...");
+
     const invoices = await prisma.invoice.findMany();
-    return NextResponse.json(invoices, { status: 200 });
+
+    if (!invoices || invoices.length === 0) {
+      console.warn("⚠️ No invoices found.");
+      return NextResponse.json({ message: "No invoices found." }, { status: 404 });
+    }
+
+    console.log("✅ Invoices retrieved:", invoices);
+    return NextResponse.json(invoices);
   } catch (error) {
     console.error("❌ Error fetching invoices:", error);
-    return NextResponse.json({ message: "Error fetching invoices", error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
-// POST method
+/**
+ * POST: Add a new invoice to the database.
+ */
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
 

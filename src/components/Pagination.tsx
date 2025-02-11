@@ -2,7 +2,7 @@ function Pagination({ currentPage, totalItems, onPageChange }) {
   const itemsPerPage = 10; // Number of items per page
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-  if (totalPages <= 1) return null; // Don't show pagination if only one page
+  if (totalPages <= 1) return null;
 
   return (
     <div className="flex justify-center mt-4">

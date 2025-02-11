@@ -12,6 +12,7 @@ declare module "next-auth" {
     name: string;
     email: string;
     role: string;
+    realmId?: string; // ✅ Ensure realmId is included
   }
 
   interface Session {
@@ -20,6 +21,7 @@ declare module "next-auth" {
       name: string;
       email: string;
       role: string;
+      realmId?: string;
     };
   }
 }
@@ -59,32 +61,58 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           email: user.email,
           role: user.role,
+          realmId: user.realmId, // ✅ Ensure realmId is included on login
         };
       },
     }),
   ],
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
+    // 🔹 Ensure realmId is retrieved every time the session is accessed
     async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id;
-        session.user.role = token.role;
+      console.log("🔍 Debugging session callback:", token);
+
+      if (session.user) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: session.user.email },
+          select: { realmId: true, role: true },
+        });
+
+        session.user.realmId = dbUser?.realmId || null; // ✅ Always fetch from DB
+        session.user.role = dbUser?.role || "user";
       }
+
+      console.log("✅ Updated session with realmId:", session.user.realmId);
       return session;
     },
+
+    // 🔹 Ensure realmId is persisted in the JWT token
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
+        console.log("🔍 Storing realmId in JWT:", user.realmId);
+        token.realmId = user.realmId;
         token.role = user.role;
+      } else {
+        // If the user is already logged in, fetch the latest realmId from DB
+        const userFromDB = await prisma.user.findUnique({
+          where: { email: token.email },
+          select: { realmId: true, role: true },
+        });
+
+        token.realmId = userFromDB?.realmId || null;
+        token.role = userFromDB?.role || "user";
       }
+
       return token;
     },
   },
+
   session: { strategy: "jwt" },
   pages: {
     signIn: "/signin",
   },
 };
+
 
 const handler = NextAuth(authOptions);
 export { handler, handler as GET, handler as POST };

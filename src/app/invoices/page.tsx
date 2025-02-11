@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Pagination from "../../components/Pagination";
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import axios from "axios";
+import Pagination from "../../components/Pagination";
 
 export default function InvoicesPage() {
   const { data: session } = useSession();
   const [invoices, setInvoices] = useState([]);
   const [quickBooksInvoices, setQuickBooksInvoices] = useState([]);
+  const [totalInvoices, setTotalInvoices] = useState(0);
   const [manualInvoicesPage, setManualInvoicesPage] = useState(1);
   const [quickBooksInvoicesPage, setQuickBooksInvoicesPage] = useState(1);
   const [manualSortOption, setManualSortOption] = useState("");
@@ -16,40 +17,147 @@ export default function InvoicesPage() {
 
   const itemsPerPage = 10;
 
-  // ✅ Fetch Local Invoices
+  // ✅ Fetch Local Invoices with Pagination
   const fetchLocalInvoices = async () => {
     try {
+      console.log("🔍 Fetching stored local invoices...");
       const res = await axios.get("/api/invoices");
+      if (res.data.length === 0) {
+        console.log("⚠️ No local invoices found.");
+      }
       setInvoices(res.data);
     } catch (error) {
       console.error("❌ Error fetching local invoices:", error);
     }
   };
 
-  // ✅ Fetch QuickBooks Invoices
   const fetchQuickBooksInvoices = async () => {
     try {
-      const res = await axios.get("/api/quickbooks/get");
-      setQuickBooksInvoices(res.data);
+      console.log("🔍 Fetching stored QuickBooks invoices from DB...");
+      const storedRes = await axios.get("/api/quickbooks/get");
+
+      if (storedRes.data.length > 0) {
+        console.log("✅ Using stored QuickBooks invoices:", storedRes.data.length);
+        setQuickBooksInvoices(storedRes.data);
+        return;
+      }
+
+      // ✅ Wait for session data to load before fetching
+      if (!session?.user?.realmId) {
+        console.error("❌ No `realmId` found in session, retrying in 2 seconds...");
+        setTimeout(fetchQuickBooksInvoices, 2000); // Retry after delay
+        return;
+      }
+
+      const realmId = session.user.realmId;
+      console.log(`✅ Using realmId from session: ${realmId}`);
+
+      console.log("📥 Fetching fresh invoices from QuickBooks API...");
+      const res = await axios.get(`/api/quickbooks/invoices?realmId=${realmId}`);
+
+      console.log("✅ Full QuickBooks Response:", res.data);
+
+      // 🔍 Ensure we correctly access the nested invoices
+      if (!res.data || !res.data.QueryResponse || !res.data.QueryResponse.Invoice) {
+        console.error("❌ No invoices returned from QuickBooks API");
+        return;
+      }
+
+      const quickBooksInvoices = res.data.QueryResponse.Invoice;
+      console.log("✅ Extracted Invoices:", quickBooksInvoices);
+      setQuickBooksInvoices(quickBooksInvoices);
+
+      console.log("💾 Storing invoices in DB...");
+      await axios.post("/api/quickbooks/store", { invoices: quickBooksInvoices });
+
+      console.log("✅ Successfully stored QuickBooks invoices in DB.");
     } catch (error) {
       console.error("❌ Error fetching QuickBooks invoices:", error);
     }
   };
 
+
+
   // ✅ Connect to QuickBooks (OAuth Redirect)
   const connectToQuickBooks = async () => {
     try {
-      console.log("🔗 Redirecting to QuickBooks...");
-      window.location.href = "/api/quickbooks/auth"; // Redirects to OAuth flow
+      console.log("🔗 Redirecting to QuickBooks OAuth...");
+      window.location.href = "/api/quickbooks/auth";
     } catch (error) {
       console.error("❌ Error connecting to QuickBooks:", error);
     }
   };
 
+  const fetchStoredQuickBooksInvoices = async () => {
+    try {
+      console.log("🔍 Fetching stored QuickBooks invoices from DB...");
+      const res = await axios.get("/api/quickbooks/get");
+
+      if (res.data.length > 0) {
+        console.log("✅ Loaded stored QuickBooks invoices:", res.data.length);
+        setQuickBooksInvoices(res.data); // ✅ Persist invoices after refresh
+      } else {
+        console.warn("⚠️ No stored QuickBooks invoices found.");
+      }
+    } catch (error) {
+      console.error("❌ Error fetching stored QuickBooks invoices:", error);
+    }
+  };
+
   useEffect(() => {
+    console.log("✅ Session data:", session);
+    console.log("🔹 User role:", session?.user?.role);
     fetchLocalInvoices();
-    fetchQuickBooksInvoices();
-  }, []);
+    fetchStoredQuickBooksInvoices(); // ✅ Always fetch stored invoices on page load
+
+    if (!session?.user?.realmId) {
+      console.error("❌ No `realmId` found in session, forcing session update...");
+      // signIn("google"); // ✅ Force session refresh
+    }
+
+  }, [session]);
+
+
+  // ✅ Sorting for Local Invoices
+  const sortManualInvoices = (sortOption) => {
+    const sorted = [...invoices].sort((a, b) => {
+      if (sortOption === "amount") return a.totalAmount - b.totalAmount;
+      if (sortOption === "status") return a.status.localeCompare(b.status);
+      if (sortOption === "company") return a.companyName.localeCompare(b.companyName);
+      return 0;
+    });
+    setInvoices(sorted);
+    setManualSortOption(sortOption);
+  };
+
+  // ✅ Sorting for QuickBooks Invoices
+  const sortQuickBooksInvoices = (sortOption) => {
+    let sorted = [...quickBooksInvoices];
+    switch (sortOption) {
+      case "amountAsc":
+        sorted.sort((a, b) => a.totalAmount - b.totalAmount);
+        break;
+      case "amountDesc":
+        sorted.sort((a, b) => b.totalAmount - a.totalAmount);
+        break;
+      case "balanceAsc":
+        sorted.sort((a, b) => a.balance - b.balance);
+        break;
+      case "balanceDesc":
+        sorted.sort((a, b) => b.balance - a.balance);
+        break;
+      case "companyAsc":
+        sorted.sort((a, b) => a.companyName.localeCompare(b.companyName));
+        break;
+      case "companyDesc":
+        sorted.sort((a, b) => b.companyName.localeCompare(a.companyName));
+        break;
+      default:
+        break;
+    }
+    setQuickBooksInvoices(sorted);
+    setQuickBooksSortOption(sortOption);
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
@@ -72,7 +180,7 @@ export default function InvoicesPage() {
           onClick={fetchQuickBooksInvoices}
           className="bg-green-500 text-white px-4 py-2 rounded"
         >
-          Fetch QuickBooks Invoices
+          Fetch & Store QuickBooks Invoices
         </button>
       </div>
 
@@ -80,13 +188,22 @@ export default function InvoicesPage() {
         {/* ✅ Local Invoices Section */}
         <div className="border p-4 rounded shadow-md">
           <h2 className="text-lg font-bold mb-4">Local Invoices</h2>
-          <Pagination
-            currentPage={manualInvoicesPage}
-            totalItems={invoices.length}
-            onPageChange={setManualInvoicesPage}
-          />
+          <div className="mb-4">
+            <label className="font-medium mr-2">Sort by:</label>
+            <select
+              value={manualSortOption}
+              onChange={(e) => sortManualInvoices(e.target.value)}
+              className="border rounded px-2 py-1"
+            >
+              <option value="">Select</option>
+              <option value="company">Company Name</option>
+              <option value="amount">Total Amount</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
+          <Pagination currentPage={manualInvoicesPage} totalItems={totalInvoices} onPageChange={setManualInvoicesPage} />
           <ul>
-            {invoices.map((invoice) => (
+            {(invoices || []).map((invoice) => (
               <li key={invoice.id} className="mb-4 border-b pb-2 p-4 rounded-md shadow-sm bg-white">
                 <h2 className="text-lg font-bold mb-2">Local Invoice #{invoice.id}</h2>
                 <p><strong>Company Name:</strong> {invoice.companyName || "N/A"}</p>
@@ -102,24 +219,98 @@ export default function InvoicesPage() {
         {/* ✅ QuickBooks Invoices Section */}
         <div className="border p-4 rounded shadow-md">
           <h2 className="text-lg font-bold mb-4">QuickBooks Invoices</h2>
-          <Pagination
-            currentPage={quickBooksInvoicesPage}
-            totalItems={quickBooksInvoices.length}
-            onPageChange={setQuickBooksInvoicesPage}
-          />
-          <ul>
-            {quickBooksInvoices.map((invoice) => (
-              <li key={invoice.id} className="mb-4 border-b pb-2 p-4 rounded-md shadow-sm bg-white">
-                <h2 className="text-lg font-bold mb-2">Invoice #{invoice.docNumber}</h2>
-                <p><strong>Company Name:</strong> {invoice.companyName || "N/A"}</p>
-                <p><strong>Transaction Date:</strong> {formatDate(invoice.txnDate)}</p>
-                <p><strong>Due Date:</strong> {invoice.dueDate ? formatDate(invoice.dueDate) : "No Due Date"}</p>
-                <p><strong>Total Amount:</strong> ${invoice.totalAmount.toFixed(2)}</p>
-                <p><strong>Balance Due:</strong> ${invoice.balance.toFixed(2)}</p>
-              </li>
-            ))}
-          </ul>
+
+          {/* Sorting Dropdown */}
+          <div className="mb-4 flex justify-between items-center">
+            <label className="font-medium">Sort by:</label>
+            <select
+              value={quickBooksSortOption}
+              onChange={(e) => sortQuickBooksInvoices(e.target.value)}
+              className="border rounded px-2 py-1"
+            >
+              <option value="">Select</option>
+              <option value="amountAsc">Amount (Low → High)</option>
+              <option value="amountDesc">Amount (High → Low)</option>
+              <option value="balanceAsc">Balance Due (Low → High)</option>
+              <option value="balanceDesc">Balance Due (High → Low)</option>
+              <option value="companyAsc">Company Name (A → Z)</option>
+              <option value="companyDesc">Company Name (Z → A)</option>
+            </select>
+          </div>
+
+          {/* ✅ Paginated QuickBooks Invoices - 1 per Row */}
+          <div className="space-y-4">
+            {quickBooksInvoices?.length > 0 ? (
+              quickBooksInvoices
+                .slice((quickBooksInvoicesPage - 1) * itemsPerPage, quickBooksInvoicesPage * itemsPerPage)
+                .map((invoice) => (
+                  <div key={invoice.quickbooksId || `invoice-${index}`} className="border rounded-md p-4 shadow bg-white flex flex-col">
+                    <div className="flex justify-between items-center border-b pb-2">
+                      <h2 className="font-bold text-lg">📄 Invoice #{invoice.docNumber || "N/A"}</h2>
+                      <span className="text-sm text-gray-500">{invoice.emailStatus || "N/A"}</span>
+                    </div>
+
+                    <p className="text-sm text-gray-700">
+                      <strong>🏢 {invoice.customerName || "N/A"}</strong>
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                      <p><strong>📅 Date:</strong> {invoice.txnDate ? formatDate(invoice.txnDate) : "N/A"}</p>
+                      <p><strong>⏳ Due:</strong> {invoice.dueDate ? formatDate(invoice.dueDate) : "N/A"}</p>
+                      <p><strong>💰 Total:</strong> ${invoice.totalAmount ? invoice.totalAmount.toFixed(2) : "0.00"}</p>
+                      <p><strong>🔻 Balance:</strong> ${invoice.balance ? invoice.balance.toFixed(2) : "0.00"}</p>
+                    </div>
+
+                    <div className="mt-3 text-xs text-gray-600">
+                      {invoice.lineItems ? (
+                        <p><strong>🛒 Items:</strong> {JSON.parse(invoice.lineItems).map(i => i.Description).join(", ")}</p>
+                      ) : <p><strong>🛒 Items:</strong> N/A</p>}
+
+                      {/* {invoice.billAddr ? (
+                        <p><strong>🏠 Billing:</strong> {invoice.billAddr.Line1 || "N/A"}, {invoice.billAddr.City || "N/A"}</p>
+                      ) : <p><strong>🏠 Billing:</strong> N/A</p>}
+
+                      {invoice.shipAddr ? (
+                        <p><strong>🚚 Shipping:</strong> {invoice.shipAddr.Line1 || "N/A"}, {invoice.shipAddr.City || "N/A"}</p>
+                      ) : <p><strong>🚚 Shipping:</strong> N/A</p>} */}
+                    </div>
+                  </div>
+                ))
+            ) : (
+              <p className="text-gray-500 text-sm">No invoices available.</p>
+            )}
+          </div>
+
+
+
+          {/* ✅ Pagination Controls */}
+          <div className="flex justify-between mt-4">
+            <button
+              onClick={() => setQuickBooksInvoicesPage((prev) => Math.max(prev - 1, 1))}
+              disabled={quickBooksInvoicesPage === 1}
+              className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            >
+              ← Previous
+            </button>
+            <span className="text-sm">Page {quickBooksInvoicesPage}</span>
+            <button
+              onClick={() =>
+                setQuickBooksInvoicesPage((prev) =>
+                  prev < Math.ceil(quickBooksInvoices.length / itemsPerPage) ? prev + 1 : prev
+                )
+              }
+              disabled={
+                quickBooksInvoicesPage >= Math.ceil(quickBooksInvoices.length / itemsPerPage)
+              }
+              className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            >
+              Next →
+            </button>
+          </div>
         </div>
+
+
+
       </div>
     </div>
   );

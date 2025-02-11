@@ -20,6 +20,7 @@ model User {
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
+  realmId       String?
 }
 
 model Account {
@@ -75,18 +76,25 @@ model Invoice {
 }
 
 model QuickBooksInvoice {
-  id           String    @id @default(cuid())
-  quickbooksId String    @unique
-  docNumber    String
-  txnDate      DateTime
-  dueDate      DateTime?
-  customerName String
-  companyName  String
-  email        String?
-  totalAmount  Float
-  balance      Float
-  taxable      Boolean
-  createdAt    DateTime  @default(now())
+  id                    String    @id @default(cuid())
+  quickbooksId          String    @unique
+  docNumber             String?
+  txnDate               DateTime
+  dueDate               DateTime?
+  totalAmount           Float
+  balance               Float
+  taxable               Boolean?
+  totalTax              Float?
+  printStatus           String?
+  emailStatus           String?
+  applyTaxAfterDiscount Boolean?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  companyName           String
+  customerId            String?
+  customerName          String?
+  email                 String?
+  lineItems             Json?
 }
 
 model QuickBooksToken {

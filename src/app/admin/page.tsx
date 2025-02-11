@@ -8,6 +8,7 @@ import axios from "axios";
 
 interface Invoice {
   id: string;
+  quickbooksId?: string;
   docNumber?: string;
   companyName: string;
   taxable: boolean;
@@ -15,6 +16,11 @@ interface Invoice {
   balance: number;
   txnDate: string;
   dueDate?: string;
+  emailStatus?: string;
+  printStatus?: string;
+  totalTax?: number;
+  applyTaxAfterDiscount?: boolean;
+  lineItems?: string; // Stored as JSON string
 }
 
 // ✅ SWR Fetcher Function
@@ -29,7 +35,7 @@ const AdminPage = () => {
   const [editInvoiceId, setEditInvoiceId] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<string>("");
 
-  // ✅ Use SWR for fetching invoices & QuickBooks invoices
+  // ✅ Fetch invoices & QuickBooks invoices
   const { data: invoices, mutate: mutateInvoices } = useSWR("/api/invoices", fetcher);
   const { data: quickBooksInvoices } = useSWR("/api/quickbooks/get", fetcher);
 
@@ -47,17 +53,22 @@ const AdminPage = () => {
 
   // ✅ Handle Selecting a QuickBooks Invoice
   const handleSelectQuickBooksInvoice = (id: string) => {
-    const invoice = quickBooksInvoices?.find((inv) => inv.id === id);
+    const invoice = quickBooksInvoices?.find((inv) => inv.quickbooksId === id);
     if (invoice) {
       setNewInvoice({
-        quickbooksId: invoice.id,
+        quickbooksId: invoice.quickbooksId,
         docNumber: invoice.docNumber,
         companyName: invoice.companyName,
         taxable: invoice.taxable,
-        totalAmount: invoice.totalAmount,
+        totalAmount: invoice.totalAmount || 0,
         balance: invoice.balance || 0,
         txnDate: invoice.txnDate ? invoice.txnDate.split("T")[0] : new Date().toISOString().split("T")[0],
         dueDate: invoice.dueDate ? invoice.dueDate.split("T")[0] : "",
+        emailStatus: invoice.emailStatus || "N/A",
+        printStatus: invoice.printStatus || "N/A",
+        totalTax: invoice.totalTax || 0,
+        applyTaxAfterDiscount: invoice.applyTaxAfterDiscount || false,
+        lineItems: invoice.lineItems ? JSON.stringify(JSON.parse(invoice.lineItems), null, 2) : "[]",
       });
     }
     setSelectedInvoice(id);
@@ -102,6 +113,11 @@ const AdminPage = () => {
         balance: newInvoice.balance || 0,
         txnDate: newInvoice.txnDate ? new Date(newInvoice.txnDate).toISOString() : new Date().toISOString(),
         dueDate: newInvoice.dueDate ? new Date(newInvoice.dueDate).toISOString() : null,
+        emailStatus: newInvoice.emailStatus || "NotSet",
+        printStatus: newInvoice.printStatus || "NotSet",
+        totalTax: newInvoice.totalTax || 0,
+        applyTaxAfterDiscount: newInvoice.applyTaxAfterDiscount || false,
+        lineItems: newInvoice.lineItems ? JSON.stringify(JSON.parse(newInvoice.lineItems)) : "[]",
       };
 
       if (isEditing && editInvoiceId) {
@@ -144,28 +160,49 @@ const AdminPage = () => {
             >
               <option value="">Select QuickBooks Invoice</option>
               {quickBooksInvoices?.map((invoice) => (
-                <option key={invoice.id} value={invoice.id}>
+                <option key={invoice.quickbooksId} value={invoice.quickbooksId}>
                   {invoice.companyName} - {invoice.docNumber}
                 </option>
               ))}
             </select>
           )}
 
-          <input
-            type="text"
-            placeholder="Invoice Number"
-            value={newInvoice.docNumber || ""}
-            onChange={(e) => setNewInvoice({ ...newInvoice, docNumber: e.target.value })}
-            className="border p-2 w-full mt-2"
-            required
-          />
-          <input
-            type="text"
-            placeholder="Company Name"
-            value={newInvoice.companyName || ""}
-            onChange={(e) => setNewInvoice({ ...newInvoice, companyName: e.target.value })}
-            className="border p-2 w-full mt-2"
-            required
+          <input type="text" placeholder="Invoice Number" value={newInvoice.docNumber || ""} onChange={(e) => setNewInvoice({ ...newInvoice, docNumber: e.target.value })} className="border p-2 w-full mt-2" required />
+          <input type="text" placeholder="Company Name" value={newInvoice.companyName || ""} onChange={(e) => setNewInvoice({ ...newInvoice, companyName: e.target.value })} className="border p-2 w-full mt-2" required />
+
+          <input type="text" placeholder="Print Status" value={newInvoice.printStatus || ""} onChange={(e) => setNewInvoice({ ...newInvoice, printStatus: e.target.value })} className="border p-2 w-full mt-2" />
+          <input type="text" placeholder="Email Status" value={newInvoice.emailStatus || ""} onChange={(e) => setNewInvoice({ ...newInvoice, emailStatus: e.target.value })} className="border p-2 w-full mt-2" />
+
+          <label className="block mt-2">Total Amount ($)
+            <input type="number" value={newInvoice.totalAmount || ""} onChange={(e) => setNewInvoice({ ...newInvoice, totalAmount: Number(e.target.value) })} className="border p-2 w-full" />
+          </label>
+
+          <label className="block mt-2">Balance Due ($)
+            <input type="number" value={newInvoice.balance || ""} onChange={(e) => setNewInvoice({ ...newInvoice, balance: Number(e.target.value) })} className="border p-2 w-full" />
+          </label>
+
+          <label className="block mt-2">Transaction Date
+            <input type="date" value={newInvoice.txnDate || ""} onChange={(e) => setNewInvoice({ ...newInvoice, txnDate: e.target.value })} className="border p-2 w-full" />
+          </label>
+
+          <label className="block mt-2">Due Date
+            <input type="date" value={newInvoice.dueDate || ""} onChange={(e) => setNewInvoice({ ...newInvoice, dueDate: e.target.value })} className="border p-2 w-full" />
+          </label>
+
+          <label className="block mt-2">Total Tax ($)
+            <input type="number" value={newInvoice.totalTax || ""} onChange={(e) => setNewInvoice({ ...newInvoice, totalTax: Number(e.target.value) })} className="border p-2 w-full" />
+          </label>
+
+          <label className="block mt-2">
+            Apply Tax After Discount:
+            <input type="checkbox" checked={newInvoice.applyTaxAfterDiscount ?? false} onChange={(e) => setNewInvoice({ ...newInvoice, applyTaxAfterDiscount: e.target.checked })} className="ml-2" />
+          </label>
+
+          <textarea
+            placeholder="Line Items (JSON Format)"
+            value={newInvoice.lineItems || ""}
+            onChange={(e) => setNewInvoice({ ...newInvoice, lineItems: e.target.value })}
+            className="border p-2 w-full mt-2 h-24"
           />
 
           <div className="flex gap-2 mt-4">
@@ -179,40 +216,32 @@ const AdminPage = () => {
         </div>
       )}
 
-      {/* ✅ Display Invoice Table */}
-      {invoices ? (
-        invoices.length > 0 ? (
-          <table className="w-full border mt-4">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border p-2">Invoice #</th>
-                <th className="border p-2">Company Name</th>
-                <th className="border p-2">Total</th>
-                <th className="border p-2">Balance</th>
-                <th className="border p-2">Actions</th>
+      {/* ✅ Display Invoice Table with Edit & Delete buttons */}
+      {invoices?.length > 0 ? (
+        <table className="w-full border mt-4">
+          <thead>
+            <tr className="bg-gray-200">
+              <th className="border p-2">Invoice #</th>
+              <th className="border p-2">Company Name</th>
+              <th className="border p-2">Total</th>
+              <th className="border p-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoices.map((invoice) => (
+              <tr key={invoice.id}>
+                <td className="border p-2">{invoice.docNumber}</td>
+                <td className="border p-2">{invoice.companyName}</td>
+                <td className="border p-2">${invoice.totalAmount.toFixed(2)}</td>
+                <td className="border p-2">
+                  <button onClick={() => handleEdit(invoice)} className="bg-yellow-500 text-white px-3 py-1 rounded mr-2">Edit</button>
+                  <button onClick={() => handleDelete(invoice.id)} className="bg-red-500 text-white px-3 py-1 rounded">Delete</button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {invoices.map((invoice: Invoice) => (
-                <tr key={invoice.id}>
-                  <td className="border p-2">{invoice.docNumber}</td>
-                  <td className="border p-2">{invoice.companyName}</td>
-                  <td className="border p-2">${invoice.totalAmount.toFixed(2)}</td>
-                  <td className="border p-2">${invoice.balance.toFixed(2)}</td>
-                  <td className="border p-2">
-                    <button onClick={() => handleEdit(invoice)} className="bg-yellow-500 text-white px-4 py-2 rounded mr-2">Edit</button>
-                    <button onClick={() => handleDelete(invoice.id)} className="bg-red-500 text-white px-4 py-2 rounded">Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-center text-gray-500 mt-4">No invoices found.</p>
-        )
-      ) : (
-        <p className="text-center text-gray-500 mt-4">Loading invoices...</p>
-      )}
+            ))}
+          </tbody>
+        </table>
+      ) : <p>No invoices found.</p>}
     </div>
   );
 };
