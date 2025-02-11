@@ -16,7 +16,6 @@ export async function GET(req: Request) {
             return new Response(JSON.stringify({ error: "No QuickBooks tokens found" }), { status: 404 });
         }
 
-        // 🔄 Refresh access token if needed
         if (!tokens.access_token) {
             console.error("❌ No access token found in database!");
             return new Response(JSON.stringify({ error: "No access token found" }), { status: 401 });
@@ -25,7 +24,7 @@ export async function GET(req: Request) {
         const newTokens = await refreshAccessToken(tokens.refresh_token);
         if (newTokens) {
             await updateQuickBooksTokens(realmId, newTokens.access_token, newTokens.refresh_token);
-            tokens.access_token = newTokens.access_token; // ✅ Ensure fresh token is used
+            tokens.access_token = newTokens.access_token;
         } else {
             return new Response(JSON.stringify({ error: "Failed to refresh token" }), { status: 401 });
         }
@@ -50,7 +49,6 @@ export async function GET(req: Request) {
         }
 
         const invoices = await response.json();
-        // console.log("✅ QuickBooks API Response:", JSON.stringify(invoices, null, 2));
 
         return new Response(JSON.stringify(invoices), { status: 200 });
     } catch (error) {

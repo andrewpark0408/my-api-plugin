@@ -17,7 +17,6 @@ export async function GET(req: Request) {
     console.log("📥 Received QuickBooks OAuth Code:", code);
     console.log("📥 Received Realm ID:", realmId);
 
-    // Retrieve the authenticated session
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
       return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
@@ -25,11 +24,9 @@ export async function GET(req: Request) {
 
     console.log("✅ Authenticated user:", session.user.email);
 
-    // Store realmId in session
     session.user.realmId = realmId;
     console.log("✅ Stored realmId in session:", session.user.realmId);
 
-    // Save realmId to the database for the user
     await prisma.user.update({
       where: { email: session.user.email },
       data: { realmId }

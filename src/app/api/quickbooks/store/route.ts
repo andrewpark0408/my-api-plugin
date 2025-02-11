@@ -6,7 +6,6 @@ const prisma = new PrismaClient();
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    // console.log("📥 Raw QuickBooks Invoices:", body);
 
     if (!body.invoices || !Array.isArray(body.invoices) || body.invoices.length === 0) {
       console.error("❌ No valid invoices found in response:", body);
@@ -35,7 +34,7 @@ export async function POST(req: Request) {
           emailStatus: invoice.EmailStatus || "NotSet",
           applyTaxAfterDiscount: invoice.ApplyTaxAfterDiscount || false,
           lineItems: invoice.Line ? JSON.stringify(invoice.Line) : "[]",
-          updatedAt: new Date(), // ✅ Ensure this field is properly updated
+          updatedAt: new Date(),
         },
         create: {
           quickbooksId: invoice.Id,
@@ -53,7 +52,7 @@ export async function POST(req: Request) {
           applyTaxAfterDiscount: invoice.ApplyTaxAfterDiscount || false,
           lineItems: invoice.Line ? JSON.stringify(invoice.Line) : "[]",
           createdAt: new Date(),
-          updatedAt: new Date(), // ✅ Ensure this field is properly created
+          updatedAt: new Date(),
           companyName: companyName,
         },
       });

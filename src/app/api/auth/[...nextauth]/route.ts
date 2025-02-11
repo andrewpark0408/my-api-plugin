@@ -12,7 +12,7 @@ declare module "next-auth" {
     name: string;
     email: string;
     role: string;
-    realmId?: string; // ✅ Ensure realmId is included
+    realmId?: string;
   }
 
   interface Session {
@@ -61,7 +61,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           email: user.email,
           role: user.role,
-          realmId: user.realmId, // ✅ Ensure realmId is included on login
+          realmId: user.realmId,
         };
       },
     }),

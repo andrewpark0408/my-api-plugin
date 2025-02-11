@@ -17,7 +17,6 @@ export default function InvoicesPage() {
 
   const itemsPerPage = 10;
 
-  // ✅ Fetch Local Invoices with Pagination
   const fetchLocalInvoices = async () => {
     try {
       console.log("🔍 Fetching stored local invoices...");
@@ -42,10 +41,9 @@ export default function InvoicesPage() {
         return;
       }
 
-      // ✅ Wait for session data to load before fetching
       if (!session?.user?.realmId) {
         console.error("❌ No `realmId` found in session, retrying in 2 seconds...");
-        setTimeout(fetchQuickBooksInvoices, 2000); // Retry after delay
+        setTimeout(fetchQuickBooksInvoices, 2000);
         return;
       }
 
@@ -57,7 +55,6 @@ export default function InvoicesPage() {
 
       console.log("✅ Full QuickBooks Response:", res.data);
 
-      // 🔍 Ensure we correctly access the nested invoices
       if (!res.data || !res.data.QueryResponse || !res.data.QueryResponse.Invoice) {
         console.error("❌ No invoices returned from QuickBooks API");
         return;
@@ -77,8 +74,6 @@ export default function InvoicesPage() {
   };
 
 
-
-  // ✅ Connect to QuickBooks (OAuth Redirect)
   const connectToQuickBooks = async () => {
     try {
       console.log("🔗 Redirecting to QuickBooks OAuth...");
@@ -95,7 +90,7 @@ export default function InvoicesPage() {
 
       if (res.data.length > 0) {
         console.log("✅ Loaded stored QuickBooks invoices:", res.data.length);
-        setQuickBooksInvoices(res.data); // ✅ Persist invoices after refresh
+        setQuickBooksInvoices(res.data);
       } else {
         console.warn("⚠️ No stored QuickBooks invoices found.");
       }
@@ -108,17 +103,15 @@ export default function InvoicesPage() {
     console.log("✅ Session data:", session);
     console.log("🔹 User role:", session?.user?.role);
     fetchLocalInvoices();
-    fetchStoredQuickBooksInvoices(); // ✅ Always fetch stored invoices on page load
+    fetchStoredQuickBooksInvoices();
 
     if (!session?.user?.realmId) {
       console.error("❌ No `realmId` found in session, forcing session update...");
-      // signIn("google"); // ✅ Force session refresh
     }
 
   }, [session]);
 
 
-  // ✅ Sorting for Local Invoices
   const sortManualInvoices = (sortOption) => {
     const sorted = [...invoices].sort((a, b) => {
       if (sortOption === "amount") return a.totalAmount - b.totalAmount;
@@ -130,7 +123,6 @@ export default function InvoicesPage() {
     setManualSortOption(sortOption);
   };
 
-  // ✅ Sorting for QuickBooks Invoices
   const sortQuickBooksInvoices = (sortOption) => {
     let sorted = [...quickBooksInvoices];
     switch (sortOption) {
@@ -167,8 +159,6 @@ export default function InvoicesPage() {
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-xl font-bold mb-6">Invoices</h1>
-
-      {/* ✅ QuickBooks Buttons */}
       <div className="flex gap-4 mb-4">
         <button
           onClick={connectToQuickBooks}
@@ -183,9 +173,7 @@ export default function InvoicesPage() {
           Fetch & Store QuickBooks Invoices
         </button>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* ✅ Local Invoices Section */}
         <div className="border p-4 rounded shadow-md">
           <h2 className="text-lg font-bold mb-4">Local Invoices</h2>
           <div className="mb-4">
@@ -215,8 +203,6 @@ export default function InvoicesPage() {
             ))}
           </ul>
         </div>
-
-        {/* ✅ QuickBooks Invoices Section */}
         <div className="border p-4 rounded shadow-md">
           <h2 className="text-lg font-bold mb-4">QuickBooks Invoices</h2>
 
@@ -237,8 +223,6 @@ export default function InvoicesPage() {
               <option value="companyDesc">Company Name (Z → A)</option>
             </select>
           </div>
-
-          {/* ✅ Paginated QuickBooks Invoices - 1 per Row */}
           <div className="space-y-4">
             {quickBooksInvoices?.length > 0 ? (
               quickBooksInvoices
@@ -265,14 +249,6 @@ export default function InvoicesPage() {
                       {invoice.lineItems ? (
                         <p><strong>🛒 Items:</strong> {JSON.parse(invoice.lineItems).map(i => i.Description).join(", ")}</p>
                       ) : <p><strong>🛒 Items:</strong> N/A</p>}
-
-                      {/* {invoice.billAddr ? (
-                        <p><strong>🏠 Billing:</strong> {invoice.billAddr.Line1 || "N/A"}, {invoice.billAddr.City || "N/A"}</p>
-                      ) : <p><strong>🏠 Billing:</strong> N/A</p>}
-
-                      {invoice.shipAddr ? (
-                        <p><strong>🚚 Shipping:</strong> {invoice.shipAddr.Line1 || "N/A"}, {invoice.shipAddr.City || "N/A"}</p>
-                      ) : <p><strong>🚚 Shipping:</strong> N/A</p>} */}
                     </div>
                   </div>
                 ))
@@ -280,10 +256,7 @@ export default function InvoicesPage() {
               <p className="text-gray-500 text-sm">No invoices available.</p>
             )}
           </div>
-
-
-
-          {/* ✅ Pagination Controls */}
+          {/* Pagination Controls */}
           <div className="flex justify-between mt-4">
             <button
               onClick={() => setQuickBooksInvoicesPage((prev) => Math.max(prev - 1, 1))}
@@ -308,9 +281,6 @@ export default function InvoicesPage() {
             </button>
           </div>
         </div>
-
-
-
       </div>
     </div>
   );

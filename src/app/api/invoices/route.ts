@@ -51,7 +51,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
     }
 
-    // Create a new invoice
     const newInvoice = await prisma.invoice.create({
       data: {
         invoiceId: body.docNumber,
